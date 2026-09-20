@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+build/
+dist/
+*.spec
+.venv/
+*.ko.srt
+*.ko.ass
+*.ko.ssa
+*.ko.vtt

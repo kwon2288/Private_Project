@@ -1,0 +1,3 @@
+pysubs2
+requests
+charset-normalizer
