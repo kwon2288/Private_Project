@@ -167,15 +167,15 @@ mark{background:var(--mark);color:inherit;border-radius:3px;padding:0 1px}
 .wk hr{border:0;border-top:.5px solid var(--line);margin:1.6em 0}
 .wk img{max-width:100%;height:auto;border-radius:8px;cursor:zoom-in}
 .wk code{font:.86em/1.5 ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;background:var(--code);color:var(--code-ink);padding:.12em .38em;border-radius:5px;word-break:break-all}
-.wk pre{background:var(--code);color:var(--code-ink);border-radius:12px;padding:14px;overflow-x:auto;-webkit-overflow-scrolling:touch;font-size:12.8px;line-height:1.6;margin:1em 0}
+.wk pre{position:relative;z-index:0;background:var(--code);color:var(--code-ink);border-radius:12px;padding:14px;overflow-x:auto;font-size:12.8px;line-height:1.6;margin:1em 0}
 .wk pre code{background:none;padding:0;word-break:normal;white-space:pre;font-size:inherit;border-radius:0}
 .codewrap{position:relative;margin:1em 0}
 .codewrap pre{margin:0;padding:34px 14px 14px}
-.code-h{position:absolute;top:0;left:0;right:0;height:32px;display:flex;align-items:center;justify-content:space-between;padding:0 4px 0 13px;font-size:10.5px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;pointer-events:none}
+.code-h{position:absolute;z-index:2;top:0;left:0;right:0;height:32px;display:flex;align-items:center;justify-content:space-between;padding:0 4px 0 13px;font-size:10.5px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;pointer-events:none}
 .code-h button{pointer-events:auto;border:0;background:none;color:var(--muted);display:inline-flex;align-items:center;gap:4px;font-size:11.5px;letter-spacing:0;text-transform:none;padding:6px 8px;border-radius:8px;cursor:pointer}
 .code-h button svg{width:15px;height:15px}
 .code-h button:active{background:var(--fill)}
-.wk .table-container{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:1em 0;border-radius:10px;border:.5px solid var(--line)}
+.wk .table-container{overflow-x:auto;margin:1em 0;border-radius:10px;border:.5px solid var(--line)}
 .wk table{border-collapse:collapse;width:100%;font-size:.88em;line-height:1.5}
 .wk th,.wk td{border-bottom:.5px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top;min-width:6.5em}
 .wk th+th,.wk td+td{border-left:.5px solid var(--line)}
@@ -252,7 +252,7 @@ const CFG = {
   locale: 'ko',          // Wiki.js 기본 로케일
   gql: '/graphql',       // 같은 도메인의 Wiki.js GraphQL
   title: 'Wiki',
-  ver: '1.0.0'
+  ver: '1.0.1'
 };
 
 /* ===== 유틸 ===== */
