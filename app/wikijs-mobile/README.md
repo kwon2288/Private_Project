@@ -39,7 +39,7 @@ NPM → Hosts → Proxy Hosts → `wiki.kwonmin.com` → **Edit → Advanced** �
 location = /m {
     return 301 /m/;
 }
-location /m/ {
+location ^~ /m/ {
     alias /data/wiki-m/;
     index index.html;
     add_header Cache-Control "no-cache";
@@ -47,6 +47,15 @@ location /m/ {
 ```
 
 저장하면 바로 적용됩니다. (기존 Wiki.js 프록시 설정은 그대로 두면 됩니다.)
+
+> `^~` 는 꼭 붙여야 합니다. Proxy Host에서 **Cache Assets** 옵션을 켜 두면 NPM이 `.js/.png/.css` 요청을
+> 정규식 location으로 Wiki.js에 넘겨 버려서, `sw.js`·아이콘이 Wiki.js의 403(Forbidden)으로 응답합니다.
+
+### 문제 해결
+| 증상 | 원인 | 확인 |
+|---|---|---|
+| `/m/` 이 openresty **404** | 파일이 NPM 컨테이너의 `/data/wiki-m/` 에 없음 (다른 폴더에 복사했거나 하위 폴더가 한 단계 더 생김) | `docker exec <npm 컨테이너> ls /data/wiki-m` → `index.html` 이 바로 보여야 함 |
+| `sw.js`, 아이콘만 **403 Forbidden** | `^~` 없이 설정 + Cache Assets 켜짐 | location 줄을 `location ^~ /m/ {` 로 수정 |
 
 ### 3. 확인
 - PC 브라우저에서 `https://wiki.kwonmin.com/m/` 접속 → 홈 화면이 뜨면 성공
