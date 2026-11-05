@@ -1,6 +1,6 @@
 # Wiki Mobile — Wiki.js 모바일 PWA
 
-`https://wiki.kwonmin.com/m/` 에 붙는 모바일 전용 Wiki.js 뷰어입니다.
+`https://<위키 도메인>/m/` 에 붙는 모바일 전용 Wiki.js 뷰어입니다. (아래 예시의 `wiki.example.com` 을 실제 위키 도메인으로 바꿔 읽으세요.)
 Wiki.js와 **같은 도메인**에서 서빙되므로 Wiki.js 로그인 세션(jwt 쿠키)을 그대로 쓰고, API 키를 앱에 넣지 않습니다.
 
 ## 기능
@@ -33,7 +33,7 @@ docker exec <npm 컨테이너명> ls /data/wiki-m
 ```
 
 ### 2. Proxy Host 설정
-NPM → Hosts → Proxy Hosts → `wiki.kwonmin.com` → **Edit → Advanced** 탭의 Custom Nginx Configuration에 추가:
+NPM → Hosts → Proxy Hosts → `wiki.example.com` → **Edit → Advanced** 탭의 Custom Nginx Configuration에 추가:
 
 ```nginx
 location = /m {
@@ -58,11 +58,11 @@ location ^~ /m/ {
 | `sw.js`, 아이콘만 **403 Forbidden** | `^~` 없이 설정 + Cache Assets 켜짐 | location 줄을 `location ^~ /m/ {` 로 수정 |
 
 ### 3. 확인
-- PC 브라우저에서 `https://wiki.kwonmin.com/m/` 접속 → 홈 화면이 뜨면 성공
-- `https://wiki.kwonmin.com/m/manifest.json` 이 JSON으로 열리는지 확인
+- PC 브라우저에서 `https://wiki.example.com/m/` 접속 → 홈 화면이 뜨면 성공
+- `https://wiki.example.com/m/manifest.json` 이 JSON으로 열리는지 확인
 
 ## 아이폰 설치
-1. **Safari**로 `https://wiki.kwonmin.com/m/` 접속
+1. **Safari**로 `https://wiki.example.com/m/` 접속
 2. 공유 버튼 → **홈 화면에 추가** → 이름 `Wiki`
 3. 홈 화면의 Wiki 아이콘으로 실행
 4. 비공개 문서가 안 보이면 홈 화면의 **로그인** 버튼 → Wiki.js 로그인 → 앱으로 자동 복귀
