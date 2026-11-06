@@ -3,7 +3,7 @@
  * - 위키 이미지는 한 번 본 것을 캐시 (오프라인 열람용)
  * - GraphQL(POST)은 건드리지 않음 — 문서 데이터 캐시는 앱(index.html)이 처리
  */
-const VER = '1.0.1';
+const VER = '1.0.2';
 const SHELL = 'wiki-m-shell-' + VER;
 const IMG = 'wiki-m-img';
 const IMG_MAX = 400;
