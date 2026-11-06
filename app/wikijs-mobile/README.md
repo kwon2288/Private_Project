@@ -1,7 +1,10 @@
 # Wiki Mobile — Wiki.js 모바일 PWA
 
 `https://<위키 도메인>/m/` 에 붙는 모바일 전용 Wiki.js 뷰어입니다. (아래 예시의 `wiki.example.com` 을 실제 위키 도메인으로 바꿔 읽으세요.)
-Wiki.js와 **같은 도메인**에서 서빙되므로 Wiki.js 로그인 세션(jwt 쿠키)을 그대로 쓰고, API 키를 앱에 넣지 않습니다.
+Wiki.js와 **같은 도메인**에서 서빙되므로 Wiki.js 로그인 세션(쿠키)을 그대로 쓰고, API 키를 앱에 넣지 않습니다.
+
+> **지원 버전: Wiki.js 3.x** (REST API `/_api`).
+> Wiki.js 2.x(GraphQL `/graphql`)에서 쓰려면 v1.0.2 커밋(`82974f0`)의 파일을 사용하세요.
 
 ## 기능
 - 하단 탭: 홈 / 탐색(폴더 트리) / 검색 / 즐겨찾기
@@ -76,15 +79,16 @@ location ^~ /m/ {
 ## 설정 값 (index.html 상단)
 ```js
 const CFG = {
-  locale: 'ko',        // Wiki.js 로케일
-  gql: '/graphql',     // GraphQL 엔드포인트
+  api: '/_api',        // Wiki.js 3 REST API 경로
   title: 'Wiki',
-  ver: '1.0.0'
+  ver: '1.1.0'
 };
 ```
 
 ## 참고 / 제한
 - 편집은 Wiki.js 원래 편집기(Safari)로 열립니다. 앱은 열람 전용입니다.
-- 검색 결과는 Wiki.js에 설정된 검색 엔진(기본 DB 검색은 제목·설명 위주)을 따릅니다.
-- Mermaid 다이어그램 등 Wiki.js가 브라우저에서 그리는 요소는 원문 텍스트로 보일 수 있습니다.
+- 사이트·로케일 정보는 서버(`/_api/sites/current`)에서 자동으로 가져옵니다. 따로 설정할 값이 없습니다.
+- 검색은 Wiki.js 3의 PostgreSQL 전문 검색(본문 포함)을 사용합니다. "구절", `-제외어`, `or` 를 쓸 수 있습니다.
+- 비밀번호로 보호된 문서는 앱에서 열지 않고 위키에서 열도록 안내합니다.
+- Mermaid·PlantUML·Excalidraw 등 Wiki.js가 브라우저에서 그리는 요소, 댓글·라이브 노트는 앱에서 표시하지 않습니다(원문 텍스트로 보일 수 있음).
 - Cloudflare 프록시를 쓰는 경우 `/m/` 파일이 캐시되어 업데이트가 늦게 보이면 Cloudflare에서 캐시 퍼지를 하세요.

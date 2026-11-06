@@ -192,6 +192,23 @@ mark{background:var(--mark);color:inherit;border-radius:3px;padding:0 1px}
 .wk blockquote.is-success{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 11%,transparent)}
 .wk kbd{font:.85em ui-monospace,Menlo,monospace;border:.5px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:.1em .4em;background:var(--card)}
 .wk tab-content{display:block}
+.wk pre .hljs-comment,.wk pre .hljs-quote{color:#8b949e;font-style:italic}
+.wk pre .hljs-keyword,.wk pre .hljs-selector-tag,.wk pre .hljs-type,.wk pre .hljs-doctag{color:#ff7b72}
+.wk pre .hljs-string,.wk pre .hljs-regexp,.wk pre .hljs-meta .hljs-string{color:#a5d6ff}
+.wk pre .hljs-number,.wk pre .hljs-literal,.wk pre .hljs-symbol,.wk pre .hljs-meta,.wk pre .hljs-attr,.wk pre .hljs-selector-attr,.wk pre .hljs-operator{color:#79c0ff}
+.wk pre .hljs-title,.wk pre .hljs-section,.wk pre .hljs-function .hljs-title{color:#d2a8ff}
+.wk pre .hljs-built_in,.wk pre .hljs-variable,.wk pre .hljs-template-variable,.wk pre .hljs-params,.wk pre .hljs-name,.wk pre .hljs-selector-class,.wk pre .hljs-selector-id{color:#ffa657}
+.wk pre .hljs-tag{color:#7ee787}
+.wk pre .hljs-addition{color:#aff5b4;background:rgba(46,160,67,.18)}
+.wk pre .hljs-deletion{color:#ffdcd7;background:rgba(248,81,73,.18)}
+.codewrap.titled .code-h span{text-transform:none;letter-spacing:0;font-size:12px}
+.wk details{border:.5px solid var(--line);background:var(--card);border-radius:12px;margin:1em 0;padding:10px 14px}
+.wk details>summary{cursor:pointer;font-weight:650}
+.wk details[open]>summary{margin-bottom:8px}
+.wk block-steps,.wk block-tab{display:block}
+.wk block-steps>ol{padding-left:1.6em}
+.wk block-steps>ol>li{margin:.7em 0}
+.wk block-steps>ol>li::marker{font-weight:700;color:var(--accent)}
 .tabset{margin:1em 0}
 .tabset .tabs-b{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px}
 .tabset .tabs-b button{flex:none;border:0;border-radius:9px;background:var(--fill);color:var(--ink2);padding:6px 12px;font-size:13.5px;cursor:pointer}
@@ -240,7 +257,7 @@ mark{background:var(--mark);color:inherit;border-radius:3px;padding:0 1px}
 <main id="view"></main>
 <nav id="tabs">
   <a href="#/" data-tab="home" data-ic="home"><span>홈</span></a>
-  <a href="#/browse/0" data-tab="browse" data-ic="folder"><span>탐색</span></a>
+  <a href="#/browse" data-tab="browse" data-ic="folder"><span>탐색</span></a>
   <a href="#/search" data-tab="search" data-ic="search"><span>검색</span></a>
   <a href="#/fav" data-tab="fav" data-ic="star"><span>즐겨찾기</span></a>
 </nav>
@@ -252,10 +269,9 @@ mark{background:var(--mark);color:inherit;border-radius:3px;padding:0 1px}
 'use strict';
 /* ===== 설정 ===== */
 const CFG = {
-  locale: 'ko',          // Wiki.js 기본 로케일
-  gql: '/graphql',       // 같은 도메인의 Wiki.js GraphQL
+  api: '/_api',          // 같은 도메인의 Wiki.js 3 REST API
   title: 'Wiki',
-  ver: '1.0.2'
+  ver: '1.1.0'
 };
 
 /* ===== 유틸 ===== */
@@ -268,7 +284,7 @@ const store = {
   set(k, v) { try { localStorage.setItem('wm:' + k, JSON.stringify(v)); } catch (e) {} }
 };
 const encPath = p => p.split('/').map(encodeURIComponent).join('/');
-const pageHash = (l, p) => '#/p/' + encodeURIComponent(l || CFG.locale) + '/' + encPath(p);
+const pageHash = (l, p) => '#/p/' + encodeURIComponent(l || LOC()) + '/' + encPath(p);
 const wikiUrl = p => location.origin + '/' + encPath(p);
 const parentPath = p => p.split('/').slice(0, -1).join(' / ');
 const pad = n => String(n).padStart(2, '0');
@@ -317,48 +333,40 @@ const I = {
 /* ===== 상태 ===== */
 const app = {
   view: null, top: null, cur: null, idx: 0, routeToken: 0, searchToken: 0,
-  lastTab: 'home', tabLast: { home: '#/', browse: '#/browse/0', search: '#/search', fav: '#/fav' },
+  lastTab: 'home', tabLast: { home: '#/', browse: '#/browse', search: '#/search', fav: '#/fav' },
   scrollPos: new Map(), titleAt: 44, alwaysTitle: false,
   user: store.get('user', null), userChecked: false,
-  folders: store.get('folders', {}), page: null, favEdit: false, forceNet: false,
+  site: null, page: null, favEdit: false, forceNet: false,
   pendingAnchor: null, searchCache: new Map(), fs: 16.5
 };
-const ROOT = { home: '#/', browse: '#/browse/0', search: '#/search', fav: '#/fav' };
+const ROOT = { home: '#/', browse: '#/browse', search: '#/search', fav: '#/fav' };
 
-/* ===== 데이터 (GraphQL + 캐시) ===== */
-const Q = {
-  profile: `{ users { profile { name email } } }`,
-  recent: `query($n:Int){ pages { list(limit:$n, orderBy: UPDATED, orderByDirection: DESC) { id path locale title description updatedAt } } }`,
-  tree: `query($p:Int,$l:String!){ pages { tree(parent:$p, mode: ALL, locale:$l, includeAncestors:false) { id path depth title isFolder pageId parent locale } } }`,
-  search: `query($q:String!){ pages { search(query:$q) { results { id title description path locale } totalHits } } }`,
-  page: `query($path:String!,$l:String!){ pages { singleByPath(path:$path, locale:$l) { id path locale title description render updatedAt tags { tag title } } } }`,
-  tag: `query($t:[String!]){ pages { list(tags:$t, orderBy: TITLE, limit: 300) { id path locale title description updatedAt } } }`
-};
+/* ===== 데이터 (Wiki.js 3 REST API + 캐시) ===== */
 class NetError extends Error { constructor(m) { super(m); this.net = true; } }
-async function gql(query, variables) {
+class ApiError extends Error { constructor(m, st) { super(m); this.status = st; this.auth = st === 401 || st === 403; this.notFound = st === 404; } }
+async function api(path, params, opt = {}) {
+  const qs = params ? new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '').map(([k, v]) => [k, String(v)])).toString() : '';
   let res;
-  try {
-    res = await fetch(CFG.gql, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify({ query, variables }) });
-  } catch (e) { throw new NetError('서버에 연결할 수 없습니다.'); }
+  try { res = await fetch(CFG.api + '/' + path + (qs ? '?' + qs : ''), { method: opt.method || 'GET', credentials: 'same-origin', headers: { 'Accept': 'application/json' } }); }
+  catch (e) { throw new NetError('서버에 연결할 수 없습니다.'); }
   if (res.status >= 500) throw new NetError(`서버 응답 오류 (HTTP ${res.status})`);
-  let j;
-  try { j = await res.json(); } catch (e) { throw new NetError(`예상하지 못한 응답입니다 (HTTP ${res.status}).`); }
-  if (j.errors && j.errors.length) {
-    const e = new Error(j.errors[0].message || '요청 실패');
-    e.auth = res.status === 401 || res.status === 403 || /forbid|not authori|unauthori|auth.*required|login|permission/i.test(e.message);
-    e.notFound = /not ?found|does not exist|doesn't exist/i.test(e.message);
-    throw e;
+  let j = null;
+  try { j = await res.json(); } catch (e) {}
+  if (!res.ok || (j && j.ok === false)) {
+    const st = (j && j.statusCode) || res.status;
+    const msg = st === 401 ? '로그인이 필요합니다.' : st === 403 ? '볼 수 있는 권한이 없습니다.' : st === 404 ? '찾을 수 없습니다.' : ((j && j.message) || `요청 실패 (HTTP ${res.status})`);
+    throw new ApiError(msg, st);
   }
-  if (res.status === 401 || res.status === 403) { const e = new Error('권한이 없습니다.'); e.auth = true; throw e; }
-  return j.data;
+  if (j === null) throw new NetError(`예상하지 못한 응답입니다 (HTTP ${res.status}). Wiki.js 3 서버인지 확인하세요.`);
+  return j;
 }
-const PCACHE = 'wiki-m-pages';
+const PCACHE = 'wiki-m-v3';
 const cacheKey = k => new Request(location.origin + '/m/__data/' + encodeURIComponent(k));
 async function cachePut(k, data) { try { const c = await caches.open(PCACHE); await c.put(cacheKey(k), new Response(JSON.stringify({ data, at: Date.now() }), { headers: { 'Content-Type': 'application/json' } })); } catch (e) {} }
 async function cacheGet(k) { try { const c = await caches.open(PCACHE); const r = await c.match(cacheKey(k)); return r ? await r.json() : null; } catch (e) { return null; } }
-async function q(key, query, vars) {
+async function q(key, path, params) {
   try {
-    const data = await gql(query, vars);
+    const data = await api(path, params);
     setOnline(true); cachePut(key, data);
     return { data, fromCache: false };
   } catch (e) {
@@ -372,27 +380,55 @@ async function q(key, query, vars) {
 }
 function setOnline(on) { document.body.classList.toggle('offline', !on); }
 
-/* ===== 폴더 메타 (트리 id ↔ 경로) ===== */
-const saveFolders = debounce(() => store.set('folders', app.folders), 400);
-function rememberTree(items) {
-  let changed = false;
-  for (const it of items || []) {
-    if (!it.isFolder) continue;
-    app.folders[it.id] = { t: it.title, p: it.path, pg: it.pageId || 0, par: it.parent || 0 };
-    changed = true;
-  }
-  if (changed) saveFolders();
+/* ===== 사이트 정보 ===== */
+let sitePromise = null;
+function ensureSite() {
+  if (app.site) return Promise.resolve(app.site);
+  if (!sitePromise) sitePromise = (async () => {
+    try {
+      const s = await api('sites/current');
+      const loc = s.locales || {};
+      app.site = { id: s.id, title: s.title || '', locale: loc.primary || 'en', locales: loc.active || [] };
+      store.set('site', app.site); setOnline(true);
+    } catch (e) {
+      const c = store.get('site', null);
+      if (e.net && c) { app.site = c; setOnline(false); }
+      else { sitePromise = null; throw e; }
+    }
+    migrateLocale();
+    return app.site;
+  })();
+  return sitePromise;
 }
-function folderByPath(p) { for (const [id, f] of Object.entries(app.folders)) if (f.p === p) return Number(id); return null; }
+const SID = () => app.site.id;
+const LOC = () => (app.site && app.site.locale) || 'en';
+function migrateLocale() {
+  // 2.x 시절 저장된 즐겨찾기/최근 문서의 로케일(ko 등)을 현재 사이트 로케일로 맞춤
+  const ok = l => l === app.site.locale || (app.site.locales || []).includes(l);
+  for (const k of ['fav', 'recent']) {
+    const v = store.get(k, []); let ch = false;
+    v.forEach(x => { if (!ok(x.l)) { x.l = app.site.locale; ch = true; } });
+    if (ch) store.set(k, v);
+  }
+}
+// Wiki.js 3은 문서를 "경로 해시"로 조회함 (클라이언트와 같은 cyrb53 해시)
+const normPath = p => (p ?? '').replace(/^\/+/, '').replace(/\/+$/, '').toLowerCase().normalize('NFC') || 'home';
+function pathHash(e, t = 0) {
+  let n = 3735928559 ^ t, r = 1103547991 ^ t;
+  for (let k = 0, i; k < e.length; k++) { i = e.charCodeAt(k); n = Math.imul(n ^ i, 2654435761); r = Math.imul(r ^ i, 1597334677); }
+  n = Math.imul(n ^ n >>> 16, 2246822507); n ^= Math.imul(r ^ r >>> 13, 3266489909);
+  r = Math.imul(r ^ r >>> 16, 2246822507); r ^= Math.imul(n ^ n >>> 13, 3266489909);
+  return (4294967296 * (2097151 & r) + (n >>> 0)).toString(16);
+}
+const searchPath = () => `sites/${SID()}/pages/search`;
+
+/* ===== 폴더 경로 ===== */
+const browseHash = (p, pg) => '#/browse' + (p ? '/' + encPath(p) : '') + (pg ? '?pg=1' : '');
 function crumbsHtml(path, includeLast) {
   const segs = path.split('/').filter(Boolean);
   const upto = includeLast ? segs.length : segs.length - 1;
-  const out = [`<a href="#/browse/0">위키</a>`];
-  for (let i = 0; i < upto; i++) {
-    const p = segs.slice(0, i + 1).join('/');
-    const id = folderByPath(p);
-    out.push('<i>›</i>' + (id ? `<a href="#/browse/${id}">${esc(segs[i])}</a>` : `<span>${esc(segs[i])}</span>`));
-  }
+  const out = [`<a href="#/browse">위키</a>`];
+  for (let i = 0; i < upto; i++) out.push(`<i>›</i><a href="${browseHash(segs.slice(0, i + 1).join('/'))}">${esc(segs[i])}</a>`);
   return `<div class="crumbs">${out.join('')}</div>`;
 }
 
@@ -427,7 +463,7 @@ function rowPage(it, o = {}) {
   const s = sub ? (o.hl ? hl(sub, o.hl) : esc(sub)) : '';
   return `<a class="row${o.wrap ? ' wrap' : ''}" href="${pageHash(it.l, it.p)}"><span class="ic">${I.doc}</span><span class="rt"><span class="t">${t}</span>${s ? `<span class="s">${s}</span>` : ''}</span>${o.right || ''}</a>`;
 }
-const rowFolder = (id, title, sub) => `<a class="row" href="#/browse/${id}"><span class="ic fd">${I.folder}</span><span class="rt"><span class="t">${esc(title)}</span>${sub ? `<span class="s">${esc(sub)}</span>` : ''}</span><span class="r">${I.chev}</span></a>`;
+const rowFolder = (href, title, sub) => `<a class="row" href="${href}"><span class="ic fd">${I.folder}</span><span class="rt"><span class="t">${esc(title)}</span>${sub ? `<span class="s">${esc(sub)}</span>` : ''}</span><span class="r">${I.chev}</span></a>`;
 function errBox(e) {
   return `<div class="empty">${e.net ? I.cloud : I.alert}<b>${e.net ? '연결할 수 없습니다' : '문제가 발생했습니다'}</b><p>${esc(e.message)}</p><button class="btn ghost" data-act="reload">다시 시도</button></div>`;
 }
@@ -484,8 +520,10 @@ async function route() {
   setTab(tab || app.lastTab);
   const token = ++app.routeToken;
   try {
-    if (k === 'p') await viewPage(parts[1] || CFG.locale, parts.slice(2).join('/'), token);
-    else if (k === 'browse') await viewBrowse(parseInt(parts[1] || '0', 10) || 0, token);
+    await ensureSite();
+    if (token !== app.routeToken) return;
+    if (k === 'p') await viewPage(parts[1] || LOC(), parts.slice(2).join('/'), token);
+    else if (k === 'browse') await viewBrowse(parts.slice(1).join('/'), qs.get('pg') === '1', token);
     else if (k === 'search') await viewSearch(qs.get('q') || '', token);
     else if (k === 'fav') await viewFav(token);
     else if (k === 'tag') await viewTag(parts[1] || '', token);
@@ -499,7 +537,7 @@ async function route() {
 function goBack() {
   if (app.idx > 0) { history.back(); return; }
   const { parts } = parseHash();
-  if (parts[0] === 'browse') { const f = app.folders[parts[1]]; location.hash = f && f.par ? '#/browse/' + f.par : '#/browse/0'; return; }
+  if (parts[0] === 'browse') { location.hash = browseHash(parts.slice(1, -1).join('/')); return; }
   const t = app.tabLast[app.lastTab];
   location.hash = t && t !== location.hash ? t : '#/';
 }
@@ -507,16 +545,19 @@ function goBack() {
 /* ===== 홈 ===== */
 async function loadUser() {
   try {
-    const d = await gql(Q.profile);
-    app.user = d.users.profile.name; store.set('user', app.user);
+    const p = await api('users/profile');
+    app.user = p.name || p.email || '로그인됨'; store.set('user', app.user);
   } catch (e) {
-    if (e.auth || (!e.net)) { app.user = null; store.set('user', null); }
+    if (!e.net) { app.user = null; store.set('user', null); }
   }
   app.userChecked = true;
   const s = $('#home-sub'); if (s) s.innerHTML = homeSub();
-  const lc = $('#h-login'); if (lc) lc.innerHTML = (!app.user && app.userChecked && navigator.onLine) ? loginCard() : '';
+  const lc = $('#h-login'); if (lc) lc.innerHTML = (!app.user && navigator.onLine) ? loginCard() : '';
 }
 const homeSub = () => `<span class="dot"></span>${app.user ? esc(app.user) : (app.userChecked ? '로그인 안 됨' : '')} · ${esc(location.host)}`;
+function sortTree(items) {
+  return [...items].sort((a, b) => (b.isFolder - a.isFolder) || String(a.title).localeCompare(String(b.title), 'ko'));
+}
 async function viewHome(token) {
   setBar({ title: CFG.title, actions: `<button class="ib" data-act="settings" aria-label="설정">${I.user}</button>` });
   const recent = store.get('recent', []).slice(0, 5);
@@ -527,44 +568,43 @@ async function viewHome(token) {
     <div class="sh"><span>폴더</span></div><div id="h-folders" class="chips">${'<span class="sk" style="width:76px;height:38px;border-radius:12px"></span>'.repeat(4)}</div>
     <div class="sh"><span>최근 업데이트</span><span id="h-upd-note"></span></div><div id="h-updates">${skRows(5)}</div>`;
   if (!app.userChecked) loadUser();
-  const [tr, rc] = await Promise.allSettled([q('tree:0', Q.tree, { p: 0, l: CFG.locale }), q('recent', Q.recent, { n: 20 })]);
+  const [tr, rc] = await Promise.allSettled([
+    q('tree:', `sites/${SID()}/tree/browse`, { locale: LOC() }),
+    q('recent', searchPath(), { orderBy: 'updatedAt', orderByDirection: 'desc', limit: 20 })
+  ]);
   if (token !== app.routeToken) return;
   const fEl = $('#h-folders'), uEl = $('#h-updates');
   if (tr.status === 'fulfilled') {
-    const items = tr.value.data.pages.tree || [];
-    rememberTree(items);
+    const items = tr.value.data.items || [];
     fEl.innerHTML = items.length ? sortTree(items).map(it => it.isFolder
-      ? `<a class="chip" href="#/browse/${it.id}">${I.folder}${esc(it.title)}</a>`
-      : `<a class="chip doc" href="${pageHash(it.locale, it.path)}">${I.doc}${esc(it.title)}</a>`).join('') : `<span class="hint">표시할 폴더가 없습니다</span>`;
+      ? `<a class="chip" href="${browseHash(it.path, it.isPage)}">${I.folder}${esc(it.title)}</a>`
+      : `<a class="chip doc" href="${pageHash(LOC(), it.path)}">${I.doc}${esc(it.title)}</a>`).join('') : `<span class="hint">표시할 폴더가 없습니다</span>`;
   } else fEl.innerHTML = `<span class="hint">${esc(tr.reason.message)}</span>`;
   if (rc.status === 'fulfilled') {
-    const list = rc.value.data.pages.list || [];
+    const list = rc.value.data.results || [];
     if (rc.value.fromCache) $('#h-upd-note').textContent = '오프라인 · 저장된 목록';
     uEl.innerHTML = list.length ? `<div class="group">${list.map(p => rowPage({ l: p.locale, p: p.path, t: p.title }, { sub: rel(p.updatedAt) + ' · ' + parentPath(p.path) })).join('')}</div>`
       : `<div class="card"><p style="margin:0">문서가 없거나 볼 수 있는 권한이 없습니다.</p></div>`;
   } else uEl.innerHTML = errBox(rc.reason);
 }
-function sortTree(items) {
-  return [...items].sort((a, b) => (b.isFolder - a.isFolder) || String(a.title).localeCompare(String(b.title), 'ko'));
-}
 
 /* ===== 탐색 ===== */
-async function viewBrowse(id, token) {
-  const f = id ? app.folders[id] : null;
-  if (id) setBar({ title: f ? f.t : '폴더', back: true, always: false });
+async function viewBrowse(path, hasPage, token) {
+  const name = path ? path.split('/').pop() : '';
+  if (path) setBar({ title: name, back: true });
   else setBar({ title: '탐색' });
-  const head = id ? `${f ? crumbsHtml(f.p, false) : ''}${big(f ? f.t : '폴더')}` : big('탐색', '위키 전체 폴더 구조');
+  const head = path ? `${crumbsHtml(path, false)}${big(name)}` : big('탐색', '위키 전체 폴더 구조');
   app.view.innerHTML = head + `<div id="b-list">${skRows(6)}</div>`;
-  const r = await q('tree:' + id, Q.tree, { p: id, l: CFG.locale });
+  const r = await q('tree:' + path, `sites/${SID()}/tree/browse`, { path, locale: LOC() });
   if (token !== app.routeToken) return;
-  const items = sortTree(r.data.pages.tree || []);
-  rememberTree(items);
-  const ff = id ? app.folders[id] : null;
+  const title = r.data.title || name;
+  if (path && title !== name) { const h = $('.big h1', app.view); if (h) h.textContent = title; $('.bar-t', app.top).textContent = title; }
+  const items = sortTree(r.data.items || []);
   let html = r.fromCache ? `<div class="note">${I.cloud}오프라인 · 저장된 목록을 표시합니다</div>` : '';
   const rows = [];
-  if (ff && ff.pg) rows.push(rowPage({ l: CFG.locale, p: ff.p, t: ff.t }, { sub: '이 폴더의 문서' }));
-  for (const it of items) rows.push(it.isFolder ? rowFolder(it.id, it.title, it.pageId ? '문서 포함' : '') : rowPage({ l: it.locale, p: it.path, t: it.title }, { sub: '' }));
-  html += rows.length ? `<div class="group">${rows.join('')}</div>` : `<div class="empty">${I.folder}<b>비어 있는 폴더</b><p>표시할 문서가 없습니다.</p></div>`;
+  if (path && hasPage) rows.push(rowPage({ l: LOC(), p: path, t: title }, { sub: '이 폴더의 문서' }));
+  for (const it of items) rows.push(it.isFolder ? rowFolder(browseHash(it.path, it.isPage), it.title, it.isPage ? '문서 포함' : '') : rowPage({ l: LOC(), p: it.path, t: it.title }, { sub: '' }));
+  html += rows.length ? `<div class="group">${rows.join('')}</div>` : `<div class="empty">${I.folder}<b>비어 있는 폴더</b><p>표시할 문서가 없거나 볼 수 있는 권한이 없습니다.</p></div>`;
   $('#b-list').innerHTML = html;
 }
 
@@ -572,7 +612,7 @@ async function viewBrowse(id, token) {
 async function viewSearch(qv, token) {
   setBar({ title: '검색' });
   app.view.innerHTML = `${big('검색')}
-    <form class="sf" id="sform" role="search">${I.search}<input id="sq" type="search" enterkeyhint="search" placeholder="제목, 설명, 경로 검색" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(qv)}"><button type="button" class="clr" data-act="q-clear" aria-label="지우기" ${qv ? '' : 'hidden'}>${I.x}</button></form>
+    <form class="sf" id="sform" role="search">${I.search}<input id="sq" type="search" enterkeyhint="search" placeholder="제목, 내용 검색" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(qv)}"><button type="button" class="clr" data-act="q-clear" aria-label="지우기" ${qv ? '' : 'hidden'}>${I.x}</button></form>
     <div id="sres"></div>`;
   const inp = $('#sq');
   const run = debounce(() => doSearch(inp.value.trim()), 280);
@@ -585,7 +625,7 @@ function searchHome() {
   const h = store.get('qhist', []);
   const el = $('#sres'); if (!el) return;
   el.innerHTML = h.length ? `<div class="sh"><span>최근 검색어</span><button data-act="qhist-clear">지우기</button></div><div class="chips">${h.map(x => `<button class="chip sm" data-act="q" data-q="${esc(x)}">${esc(x)}</button>`).join('')}</div>`
-    : `<p class="hint">Wiki.js 검색 엔진으로 검색합니다. 오프라인일 때는 기기에 저장된 문서에서 찾습니다.</p>`;
+    : `<p class="hint">본문까지 전체 검색합니다. "따옴표"로 구절 검색, -단어로 제외할 수 있습니다. 오프라인일 때는 기기에 저장된 문서에서 찾습니다.</p>`;
 }
 async function doSearch(s, initial) {
   const hash = '#/search' + (s ? '?q=' + encodeURIComponent(s) : '');
@@ -596,15 +636,15 @@ async function doSearch(s, initial) {
   if (app.searchCache.has(s)) { renderResults(s, app.searchCache.get(s)); }
   else el.innerHTML = `<div style="margin-top:14px">${skRows(4)}</div>`;
   try {
-    const d = await gql(Q.search, { q: s });
+    const d = await api(searchPath(), { query: s, limit: 50 });
     if (my !== app.searchToken) return;
     setOnline(true);
-    const res = d.pages.search.results || [];
+    const res = d.results || [];
     app.searchCache.set(s, res); renderResults(s, res);
   } catch (e) {
     if (my !== app.searchToken) return;
     if (e.net) { setOnline(false); renderLocal(s); }
-    else el.innerHTML = e.auth ? loginCard() : errBox(e);
+    else el.innerHTML = e.auth && !app.user ? loginCard() : errBox(e);
   }
 }
 function renderResults(s, res) {
@@ -620,7 +660,6 @@ function renderLocal(s) {
     const k = x.l + '/' + x.p; if (seen.has(k)) continue; seen.add(k);
     if ((x.t + ' ' + x.p).toLowerCase().includes(t)) hits.push(rowPage(x, { hl: s, wrap: true }));
   }
-  for (const [id, f] of Object.entries(app.folders)) if ((f.t + ' ' + f.p).toLowerCase().includes(t)) hits.push(rowFolder(id, f.t, f.p));
   el.innerHTML = `<div class="note">${I.cloud}오프라인 · 기기에 저장된 항목에서 검색했습니다</div>` + (hits.length ? `<div class="group">${hits.join('')}</div>` : `<div class="empty"><b>결과가 없습니다</b></div>`);
 }
 
@@ -639,25 +678,27 @@ async function viewFav() {
 async function viewTag(t, token) {
   setBar({ title: '#' + t, back: true });
   app.view.innerHTML = big('#' + t, '태그가 붙은 문서') + `<div id="t-list">${skRows(5)}</div>`;
-  const r = await q('tag:' + t, Q.tag, { t: [t] });
+  const r = await q('tag:' + t, searchPath(), { tags: t, orderBy: 'title', orderByDirection: 'asc', limit: 100 });
   if (token !== app.routeToken) return;
-  const list = r.data.pages.list || [];
+  const list = r.data.results || [];
   $('#t-list').innerHTML = list.length ? `<div class="group">${list.map(p => rowPage({ l: p.locale, p: p.path, t: p.title }, { sub: p.description || parentPath(p.path), wrap: true })).join('')}</div>` : `<div class="empty"><b>문서가 없습니다</b></div>`;
 }
 
 /* ===== 문서 ===== */
+const noAccess = msg => `<div class="empty">${I.alert}<b>볼 수 없는 문서입니다</b><p>${esc(msg)}</p><a class="btn ghost" href="#/">홈으로</a></div>`;
 async function viewPage(locale, path, token) {
-  const key = 'page:' + locale + '/' + path;
+  const np = normPath(path);
+  const key = 'page:' + locale + '/' + np;
   const starOn = isFav(locale, path);
   setBar({ title: path.split('/').pop(), back: true, actions: `<button class="ib${starOn ? ' on' : ''}" data-act="star" aria-label="즐겨찾기">${I.star}</button><button class="ib" data-act="more" aria-label="더보기">${I.more}</button>` });
   const force = app.forceNet; app.forceNet = false;
   const cached = force ? null : await cacheGet(key);
   if (token !== app.routeToken) return;
-  const cpg = cached && cached.data && cached.data.pages && cached.data.pages.singleByPath;
-  if (cpg) { renderPage(cpg, { note: '' }); restoreScroll(); }
+  const cpg = cached && cached.data && cached.data.id ? cached.data : null;
+  if (cpg) { renderPage(cpg); restoreScroll(); }
   else app.view.innerHTML = `<div class="ph"><span class="sk" style="height:11px;width:40%;margin-bottom:12px"></span><span class="sk" style="height:24px;width:85%"></span><span class="sk" style="height:12px;width:60%;margin-top:12px"></span></div>${Array.from({ length: 7 }, (_, i) => `<span class="sk" style="height:12px;margin:14px 0;width:${70 + (i * 13) % 30}%"></span>`).join('')}`;
-  let d;
-  try { d = await gql(Q.page, { path, l: locale }); setOnline(true); }
+  let pg;
+  try { pg = await api(`sites/${SID()}/pages/${pathHash(np)}`, { path: np, locale }); setOnline(true); }
   catch (e) {
     if (token !== app.routeToken) return;
     if (e.net) {
@@ -665,74 +706,94 @@ async function viewPage(locale, path, token) {
       if (cpg) { const n = $('#pnote'); if (n) n.outerHTML = `<div class="note">${I.cloud}오프라인 · ${fmtDate(new Date(cached.at).toISOString())}에 저장된 버전</div>`; return; }
       throw e;
     }
-    if (e.auth) { app.view.innerHTML = crumbsHtml(path, false) + loginCard('이 문서를 보려면 로그인해야 합니다.'); return; }
+    if (e.auth) { app.view.innerHTML = crumbsHtml(path, false) + (app.user ? noAccess('이 문서를 볼 권한이 없습니다.') : loginCard('이 문서를 보려면 로그인해야 합니다.')); return; }
     if (e.notFound) { app.view.innerHTML = `<div class="empty">${I.doc}<b>문서를 찾을 수 없습니다</b><p>${esc(path)}</p><a class="btn ghost" href="#/">홈으로</a></div>`; return; }
     if (cpg) { toast(e.message); return; }
     throw e;
   }
   if (token !== app.routeToken) return;
-  const pg = d.pages.singleByPath;
-  if (!pg) { app.view.innerHTML = `<div class="empty">${I.doc}<b>문서를 찾을 수 없습니다</b><p>${esc(path)}</p></div>`; return; }
-  cachePut(key, d);
-  if (!cpg || cpg.updatedAt !== pg.updatedAt || cpg.render !== pg.render) {
-    const y = window.scrollY; renderPage(pg, {});
+  if (!pg || !pg.id) { app.view.innerHTML = `<div class="empty">${I.doc}<b>문서를 찾을 수 없습니다</b><p>${esc(path)}</p></div>`; return; }
+  if (!pg.isLocked) cachePut(key, pg);
+  if (!cpg || cpg.updatedAt !== pg.updatedAt || cpg.render !== pg.render || pg.isLocked) {
+    const y = window.scrollY; renderPage(pg);
     if (cpg) window.scrollTo(0, y); else restoreScroll();
   }
   addRecent(pg);
 }
-function renderPage(pg, o) {
+function renderPage(pg) {
   app.page = pg;
-  const tags = (pg.tags || []).map(t => `<a class="tag" href="#/tag/${encodeURIComponent(t.tag)}">#${esc(t.title || t.tag)}</a>`).join('');
+  const tags = (pg.tags || []).map(t => { const v = typeof t === 'string' ? t : (t.tag || t.title); return `<a class="tag" href="#/tag/${encodeURIComponent(v)}">#${esc(v)}</a>`; }).join('');
+  const body = pg.isLocked
+    ? `<div class="card"><div class="lc-t">${I.alert}<b>비밀번호로 보호된 문서입니다</b></div><p>앱에서는 열 수 없습니다. 위키에서 비밀번호를 입력해 열어 주세요.</p><button class="btn" data-act="open-web">위키에서 열기</button></div>`
+    : (pg.render || '');
   app.view.innerHTML = `<div id="pnote"></div>
     <header class="ph">${crumbsHtml(pg.path, false)}
       <h1 class="ph-t">${esc(pg.title)}</h1>
       ${pg.description ? `<p class="ph-d">${esc(pg.description)}</p>` : ''}
       <div class="ph-m"><span class="when">${I.clock}${fmtDate(pg.updatedAt)}</span>${tags}</div>
     </header>
-    <article id="article" class="wk">${pg.render || ''}</article>`;
+    <article id="article" class="wk">${body}</article>`;
   $('.bar-t', app.top).textContent = pg.title;
   enhance($('#article'));
   measureTitle();
 }
+function buildTabs(el, names, panes) {
+  const w = document.createElement('div'); w.className = 'tabset';
+  const bar = document.createElement('div'); bar.className = 'tabs-b'; w.appendChild(bar);
+  panes.forEach((nodes, i) => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = names[i] || ('탭 ' + (i + 1)); if (!i) b.className = 'on'; bar.appendChild(b);
+    const d = document.createElement('div'); d.className = 'pane'; d.hidden = i > 0; nodes.forEach(n => d.appendChild(n)); w.appendChild(d);
+    b.addEventListener('click', () => { $$('button', bar).forEach((x, j) => x.classList.toggle('on', j === i)); $$(':scope > .pane', w).forEach((x, j) => x.hidden = j !== i); });
+  });
+  el.replaceWith(w);
+}
 function enhance(root) {
-  // 탭셋(Wiki.js {.tabset}) → 간단한 탭 UI
+  // Wiki.js가 브라우저에서 붙이는 버튼류 제거 (앱 자체 UI로 대체)
+  $$('.heading-anchor, .toc-anchor, .code-copy', root).forEach(x => x.remove());
+  // 탭 (Wiki.js 3: <block-tabs><block-tab label="..">)
+  $$('block-tabs', root).forEach(bt => {
+    const tabs = [...bt.children].filter(c => c.tagName === 'BLOCK-TAB');
+    if (!tabs.length) return;
+    buildTabs(bt, tabs.map(t => t.getAttribute('label') || ''), tabs.map(t => [...t.childNodes]));
+  });
+  // 탭 (Wiki.js 2: <tabset> 템플릿)
   $$('tabset', root).forEach(ts => {
     const tt = ts.querySelector('template[slot="tabs"]'), tc = ts.querySelector('template[slot="content"]');
     const names = tt ? [...tt.content.querySelectorAll('li')].map(li => li.textContent.trim()) : [];
-    const panes = tc ? [...tc.content.children] : [];
+    const panes = tc ? [...tc.content.children].map(p => [document.importNode(p, true)]) : [];
     if (!panes.length) { $$('template', ts).forEach(t => t.replaceWith(t.content.cloneNode(true))); return; }
-    const w = document.createElement('div'); w.className = 'tabset';
-    const bar = document.createElement('div'); bar.className = 'tabs-b'; w.appendChild(bar);
-    panes.forEach((p, i) => {
-      const b = document.createElement('button'); b.type = 'button'; b.textContent = names[i] || ('탭 ' + (i + 1)); if (!i) b.className = 'on'; bar.appendChild(b);
-      const d = document.createElement('div'); d.className = 'pane'; d.hidden = i > 0; d.appendChild(document.importNode(p, true)); w.appendChild(d);
-      b.addEventListener('click', () => { $$('button', bar).forEach((x, j) => x.classList.toggle('on', j === i)); $$(':scope > .pane', w).forEach((x, j) => x.hidden = j !== i); });
-    });
-    ts.replaceWith(w);
+    buildTabs(ts, names, panes);
+  });
+  // 제목 붙은 코드 블록 → 제목을 코드 블록 머리글로
+  $$('.codeblock-titled', root).forEach(ct => {
+    const t = ct.querySelector('.codeblock-title'), pre = ct.querySelector('pre');
+    if (!pre) return;
+    if (t) pre.dataset.title = t.textContent.trim();
+    ct.replaceWith(pre);
   });
   // 표 가로 스크롤
   $$('table', root).forEach(t => {
     if (t.parentElement.classList.contains('table-container')) return;
     const w = document.createElement('div'); w.className = 'table-container'; t.replaceWith(w); w.appendChild(t);
   });
-  // 코드 블록: 언어 표시 + 복사 버튼
+  // 코드 블록: 언어/제목 표시 + 복사 버튼
   $$('pre', root).forEach(pre => {
     if (pre.parentElement.classList.contains('codewrap')) return;
+    if (/codeblock-(mermaid|plantuml|kroki)/.test(pre.className)) return;
     const code = pre.querySelector('code');
     const m = code && (code.className.match(/language-([\w+#-]+)/) || []);
-    const lang = m && m[1] && m[1] !== 'none' ? m[1] : '';
-    const w = document.createElement('div'); w.className = 'codewrap';
+    const lang = pre.dataset.title || (m && m[1] && m[1] !== 'none' && m[1] !== 'plaintext' ? m[1] : '');
+    const w = document.createElement('div'); w.className = 'codewrap' + (pre.dataset.title ? ' titled' : '');
     pre.replaceWith(w); w.appendChild(pre);
     w.insertAdjacentHTML('afterbegin', `<div class="code-h"><span>${esc(lang)}</span><button type="button" data-act="copy">${I.copy}복사</button></div>`);
   });
   $$('img', root).forEach(img => { img.loading = 'lazy'; img.decoding = 'async'; });
-  // id 없는 제목에 id 부여
   $$('h1,h2,h3,h4', root).forEach((h, i) => { if (!h.id) h.id = 'h-' + i; });
 }
-function headingText(h) { const c = h.cloneNode(true); $$('.toc-anchor', c).forEach(a => a.remove()); return c.textContent.trim(); }
+function headingText(h) { const c = h.cloneNode(true); $$('.toc-anchor, .heading-anchor', c).forEach(a => a.remove()); return c.textContent.trim(); }
 
 /* ===== 문서 내부 링크 처리 ===== */
-const RESERVED = /^(a|e|h|s|t|i|p|m|_assets|login|logout|register|graphql|healthz|img)(\/|$)/i;
+const RESERVED = /^(_|login(\/|$)|logout(\/|$))/i;
 function onArticleClick(e) {
   const img = e.target.closest('#article img');
   if (img && !img.closest('a')) { e.preventDefault(); const lb = $('#lb'); $('img', lb).src = img.currentSrc || img.src; lb.hidden = false; return true; }
@@ -747,9 +808,9 @@ function onArticleClick(e) {
   p = p.replace(/^\/+|\/+$/g, '');
   const last = p.split('/').pop();
   if (a.classList.contains('is-asset-link') || /\.[a-z0-9]{1,5}$/i.test(last) || RESERVED.test(p)) { window.open(u.href, '_blank', 'noopener'); return true; }
-  let loc = CFG.locale;
-  const m = p.match(/^([a-z]{2}(?:-[a-z]{2})?)\/(.+)$/i);
-  if (m && m[1].toLowerCase() === CFG.locale) p = m[2];
+  let loc = LOC();
+  const m = p.match(/^([a-z]{2}(?:-[a-z]{2,4})?)\/(.+)$/i);
+  if (m && app.site && [app.site.locale, ...(app.site.locales || [])].some(l => l.toLowerCase() === m[1].toLowerCase())) { loc = m[1]; p = m[2]; }
   if (!p) p = 'home';
   if (u.hash) app.pendingAnchor = decodeURIComponent(u.hash.slice(1));
   location.hash = pageHash(loc, p);
@@ -792,13 +853,11 @@ async function settingsSheet() {
 /* ===== 동작 ===== */
 function doLogin() {
   // 로그인 후 Wiki.js가 이 앱으로 돌려보내도록 지정
-  document.cookie = 'loginRedirect=' + location.pathname + '; path=/; max-age=900; SameSite=Lax';
-  location.href = '/login';
+  location.href = '/login?redirect=' + encodeURIComponent(location.pathname);
 }
 async function doLogout() {
   closeSheet();
-  try { await fetch('/logout', { credentials: 'same-origin', redirect: 'manual' }); } catch (e) {}
-  document.cookie = 'jwt=; path=/; max-age=0';
+  try { await api(`sites/${SID()}/auth/logout`, null, { method: 'POST' }); } catch (e) {}
   app.user = null; app.userChecked = true; store.set('user', null);
   toast('로그아웃했습니다'); location.hash = '#/'; route();
 }
@@ -827,14 +886,14 @@ const ACTS = {
   },
   'copy-link'() { closeSheet(); copyText(wikiUrl(app.page.path)); },
   'open-web'() { closeSheet(); window.open(wikiUrl(app.page.path), '_blank', 'noopener'); },
-  edit() { closeSheet(); window.open(location.origin + '/e/' + app.page.locale + '/' + encPath(app.page.path), '_blank', 'noopener'); },
+  edit() { closeSheet(); window.open(location.origin + '/_edit/' + encPath(app.page.path), '_blank', 'noopener'); },
   refresh() { closeSheet(); app.forceNet = true; route(); },
   copy(t) { const pre = t.closest('.codewrap').querySelector('pre'); copyText(pre.innerText.replace(/\n$/, '')); },
   'fav-edit'() { app.favEdit = !app.favEdit; viewFav(); },
   'fav-del'(t) { store.set('fav', favs().filter(x => !(x.l === t.dataset.l && x.p === t.dataset.p))); if (!favs().length) app.favEdit = false; viewFav(); },
   'recent-clear'() { store.set('recent', []); viewFav(); },
   'open-home'() { closeSheet(); window.open(location.origin + '/', '_blank', 'noopener'); },
-  async 'clear-cache'() { closeSheet(); try { await caches.delete(PCACHE); await caches.delete('wiki-m-img'); } catch (e) {} app.searchCache.clear(); toast('저장 데이터를 비웠습니다'); },
+  async 'clear-cache'() { closeSheet(); try { for (const c of [PCACHE, 'wiki-m-pages', 'wiki-m-img']) await caches.delete(c); } catch (e) {} app.searchCache.clear(); toast('저장 데이터를 비웠습니다'); },
   q(t) { const inp = $('#sq'); inp.value = t.dataset.q; $('.sf .clr').hidden = false; doSearch(t.dataset.q); },
   'q-clear'() { const inp = $('#sq'); inp.value = ''; $('.sf .clr').hidden = true; inp.focus(); doSearch(''); },
   'qhist-clear'() { store.set('qhist', []); searchHome(); }
