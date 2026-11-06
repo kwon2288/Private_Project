@@ -1,0 +1,38 @@
+# Wiki.js 3.x (시놀로지 NAS Docker) 예시
+# - 2.x와 나란히 띄우기 위해 컨테이너 이름·포트·볼륨을 분리
+# - 비밀번호는 반드시 바꿔서 사용
+services:
+  db:
+    image: postgres:18            # 3.x 요구사항: PostgreSQL 17 또는 18
+    container_name: wikijs3_db
+    environment:
+      POSTGRES_DB: wiki
+      POSTGRES_USER: wikijs
+      POSTGRES_PASSWORD: CHANGE_ME
+    restart: unless-stopped
+    volumes:
+      # postgres 18 이미지는 /var/lib/postgresql 에 마운트해야 함
+      # (예전처럼 /var/lib/postgresql/data 에 걸면 컨테이너가 계속 재시작됨)
+      - db-data:/var/lib/postgresql
+
+  wiki:
+    image: ghcr.io/requarks/wiki:3
+    container_name: wikijs3_wiki
+    depends_on:
+      - db
+    environment:
+      TZ: Asia/Seoul
+      DB_TYPE: postgres
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: wikijs
+      DB_PASS: CHANGE_ME
+      DB_NAME: wiki
+    restart: unless-stopped
+    ports:
+      - "3001:3000"               # 2.x가 3000을 쓰고 있어서 3001로 분리
+    volumes:
+      - ./data:/data
+
+volumes:
+  db-data:
